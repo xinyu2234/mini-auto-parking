@@ -1,0 +1,176 @@
+:root {
+  color-scheme: dark;
+  font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  background: #171b22;
+  color: #e8eaed;
+}
+
+.app {
+  display: flex;
+  height: 100%;
+}
+
+.scene {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: #11151b;
+}
+
+.status-strip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 46px;
+  padding: 0 18px;
+  background: #1d232c;
+  border-bottom: 1px solid #2b333e;
+  font-size: 15px;
+}
+
+.status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #7c8794;
+}
+
+.status-dot.status-planning,
+.status-dot.status-reversing {
+  background: #e9b44c;
+}
+
+.status-dot.status-parking {
+  background: #4f9cf9;
+}
+
+.status-dot.status-done {
+  background: #3fae5a;
+}
+
+.status-dot.status-failed {
+  background: #d6455f;
+}
+
+.status-text {
+  font-weight: 600;
+}
+
+.status-target {
+  margin-left: auto;
+  color: #aab3bd;
+  font-size: 13px;
+}
+
+.canvas-container {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+}
+
+.canvas-container canvas {
+  display: block;
+}
+
+.panel {
+  width: 264px;
+  flex-shrink: 0;
+  padding: 22px 18px;
+  background: #20262e;
+  border-left: 1px solid #2c333d;
+  overflow-y: auto;
+}
+
+.panel h1 {
+  margin: 0 0 22px;
+  font-size: 20px;
+  font-weight: 700;
+  color: #f2f4f6;
+}
+
+.control-group {
+  margin-bottom: 22px;
+}
+
+.control-group label {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 12px;
+  color: #9aa4ad;
+  letter-spacing: 0;
+}
+
+.segmented {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  background: #171c22;
+  border: 1px solid #2c333d;
+  border-radius: 6px;
+  padding: 3px;
+}
+
+.segmented button {
+  border: 0;
+  border-radius: 4px;
+  padding: 8px 0;
+  background: transparent;
+  color: #b9c1c9;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.segmented button:hover {
+  background: #262d36;
+}
+
+.segmented button.active {
+  background: #2f7cf6;
+  color: #ffffff;
+}
+
+.lot-info {
+  margin: 0;
+  padding: 10px 12px;
+  background: #171c22;
+  border: 1px solid #2c333d;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #b9c1c9;
+  line-height: 1.6;
+}
+
+.reset-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 11px 0;
+  border: 1px solid #39434f;
+  border-radius: 6px;
+  background: #262d36;
+  color: #e8eaed;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.reset-button:hover {
+  background: #2e3742;
+}

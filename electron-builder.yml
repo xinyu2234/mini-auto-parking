@@ -1,0 +1,16 @@
+appId: com.example.autoparking
+productName: 自动泊车演示
+directories:
+  output: release
+files:
+  - out/**
+asar: true
+win:
+  target:
+    - nsis
+    - portable
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  shortcutName: 自动泊车演示
