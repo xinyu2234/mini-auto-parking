@@ -7,11 +7,11 @@ interface DijkstraNode {
   dist: number
 }
 
-export function computeDijkstraField(world: World, goalX: number, goalY: number, cell: number): Float32Array {
+export function computeDijkstraField(world: World, goalX: number, goalY: number, cell: number): Float64Array {
   const b = world.bounds
   const nx = Math.ceil(b.w / cell)
   const ny = Math.ceil(b.h / cell)
-  const dist = new Float32Array(nx * ny).fill(Infinity)
+  const dist = new Float64Array(nx * ny).fill(Infinity)
   const blocked = new Uint8Array(nx * ny)
 
   for (let i = 0; i < nx * ny; i++) {

@@ -1,6 +1,6 @@
 export const PLANNER = {
   gridCell: 0.25,
-  headingBuckets: 16,
+  headingBuckets: 32,
   primitiveDist: 0.5,
   reversePenalty: 1.7,
   steeringChangePenalty: 0.22,
