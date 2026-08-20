@@ -22,14 +22,27 @@ export interface CarSpec {
 export interface Spot {
   id: string
   rect: Rect
+  angle: number
   goalPose: Pose
   occupied: boolean
 }
 
+export type LayoutId = 'perpendicular' | 'parallel' | 'angled'
+
+export type EntranceSide = 'bottom' | 'left'
+
+export interface Entrance {
+  side: EntranceSide
+  center: number
+  width: number
+}
+
 export interface World {
+  layoutId: LayoutId
+  layoutName: string
   bounds: Rect
   wallThickness: number
-  entrance: { x: number; width: number }
+  entrance: Entrance
   spots: Spot[]
   obstacles: Rect[]
   car: CarSpec

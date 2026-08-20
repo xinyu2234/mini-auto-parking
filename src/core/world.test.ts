@@ -1,9 +1,75 @@
 import { describe, expect, it } from 'vitest'
 import { isPoseColliding } from './collision'
-import { rectsOverlap } from './geometry'
+import { rectsOverlap, wrapPi } from './geometry'
 import { createWorld, validateWorldLayout } from './world'
 
 describe('world', () => {
+  it.each(['perpendicular', 'parallel', 'angled'] as const)(
+    'generates a valid %s layout',
+    (layoutId) => {
+      const world = createWorld(layoutId)
+      expect(world.layoutName.length).toBeGreaterThan(0)
+      expect(world.spots.length).toBeGreaterThanOrEqual(4)
+      expect(validateWorldLayout(world)).toEqual([])
+      expect(isPoseColliding(world, world.startPose)).toBe(false)
+      for (const spot of world.spots) {
+        expect(spot.goalPose).toBeDefined()
+      }
+    }
+  )
+
+  it('rotates spots only in the angled layout', () => {
+    const angled = createWorld('angled')
+    const perpendicular = createWorld('perpendicular')
+    const parallel = createWorld('parallel')
+    expect(angled.spots.some((s) => s.angle !== 0)).toBe(true)
+    expect(perpendicular.spots.every((s) => s.angle === 0)).toBe(true)
+    expect(parallel.spots.every((s) => s.angle === 0)).toBe(true)
+  })
+
+  it('packs perpendicular spots tightly like comb teeth', () => {
+    const world = createWorld('perpendicular')
+    const tops = world.spots
+      .filter((s) => s.id.startsWith('T'))
+      .sort((a, b) => a.rect.x - b.rect.x)
+    expect(tops.length).toBeGreaterThanOrEqual(5)
+    for (let i = 1; i < tops.length; i++) {
+      const gap = tops[i].rect.x - (tops[i - 1].rect.x + tops[i - 1].rect.w)
+      expect(gap).toBeCloseTo(0.3, 5)
+    }
+  })
+
+  it('orients parallel spots along the horizontal road', () => {
+    const world = createWorld('parallel')
+    expect(world.spots.length).toBeGreaterThanOrEqual(4)
+    for (const spot of world.spots) {
+      expect(spot.rect.w).toBeGreaterThan(spot.rect.h)
+      expect(Math.abs(wrapPi(spot.goalPose.heading))).toBeLessThan(0.01)
+    }
+  })
+
+  it('keeps parallel spots close to the long sides', () => {
+    const world = createWorld('parallel')
+    const tops = world.spots.filter((s) => s.id.startsWith('T'))
+    const bottoms = world.spots.filter((s) => s.id.startsWith('B'))
+    expect(tops.length).toBeGreaterThan(0)
+    expect(bottoms.length).toBeGreaterThan(0)
+    for (const spot of tops) {
+      expect(spot.rect.y + spot.rect.h).toBeGreaterThan(17)
+    }
+    for (const spot of bottoms) {
+      expect(spot.rect.y).toBeLessThan(4)
+    }
+  })
+
+  it('aligns angled spot headings with the slot long axis', () => {
+    const world = createWorld('angled')
+    for (const spot of world.spots) {
+      const longAxis = spot.angle + Math.PI / 2
+      expect(Math.abs(wrapPi(spot.goalPose.heading - longAxis))).toBeLessThan(0.01)
+    }
+  })
+
   it('contains at least four parking spots with nose-out goals', () => {
     const world = createWorld()
     expect(world.spots.length).toBeGreaterThanOrEqual(4)
@@ -59,12 +125,20 @@ describe('world', () => {
 
   it('leaves the entrance opening unblocked', () => {
     const world = createWorld()
-    const entrance = {
-      x: world.entrance.x,
-      y: -world.wallThickness,
-      w: world.entrance.width,
-      h: world.wallThickness
-    }
+    const entrance =
+      world.entrance.side === 'left'
+        ? {
+            x: -world.wallThickness,
+            y: world.entrance.center - world.entrance.width / 2,
+            w: world.wallThickness,
+            h: world.entrance.width
+          }
+        : {
+            x: world.entrance.center - world.entrance.width / 2,
+            y: -world.wallThickness,
+            w: world.entrance.width,
+            h: world.wallThickness
+          }
     for (const spot of world.spots) {
       expect(rectsOverlap(spot.rect, entrance, 1e-9)).toBe(false)
     }

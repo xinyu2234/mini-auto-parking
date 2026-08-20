@@ -57,6 +57,37 @@ export function pointInRect(p: Point, rect: Rect, eps = 0): boolean {
   )
 }
 
+export function rotatedRectCorners(rect: Rect, angle: number): Point[] {
+  const cx = rect.x + rect.w / 2
+  const cy = rect.y + rect.h / 2
+  const c = Math.cos(angle)
+  const s = Math.sin(angle)
+  const hw = rect.w / 2
+  const hh = rect.h / 2
+  const local = [
+    { x: -hw, y: -hh },
+    { x: hw, y: -hh },
+    { x: hw, y: hh },
+    { x: -hw, y: hh }
+  ]
+  return local.map((p) => ({
+    x: cx + p.x * c - p.y * s,
+    y: cy + p.x * s + p.y * c
+  }))
+}
+
+export function pointInRotatedRect(p: Point, rect: Rect, angle: number): boolean {
+  const cx = rect.x + rect.w / 2
+  const cy = rect.y + rect.h / 2
+  const dx = p.x - cx
+  const dy = p.y - cy
+  const c = Math.cos(angle)
+  const s = Math.sin(angle)
+  const lx = dx * c + dy * s
+  const ly = -dx * s + dy * c
+  return Math.abs(lx) <= rect.w / 2 && Math.abs(ly) <= rect.h / 2
+}
+
 export function pointsOverlap(a: Point[], b: Point[], eps = 1e-7): boolean {
   const axes: Point[] = []
   for (let i = 0; i < a.length; i++) {

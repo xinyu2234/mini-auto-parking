@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import type { PathSample, Spot, World } from '../../core/types'
-import { pointInRect } from '../../core/geometry'
+import { pointInRotatedRect } from '../../core/geometry'
 import { wallRects } from '../../core/world'
 import { LOT_HEIGHT, LOT_WIDTH } from '../../core/world'
 
@@ -78,7 +78,7 @@ export function ParkingLotCanvas(props: Props): JSX.Element {
     if (!canvas) return
     const rect = canvas.getBoundingClientRect()
     const p = screenToWorld(e.clientX - rect.left, e.clientY - rect.top)
-    const hit = props.world.spots.find((s) => pointInRect(p, s.rect))
+    const hit = props.world.spots.find((s) => pointInRotatedRect(p, s.rect, s.angle))
     props.onHover(hit ? hit.id : null)
   }
 
@@ -87,7 +87,7 @@ export function ParkingLotCanvas(props: Props): JSX.Element {
     if (!canvas) return
     const rect = canvas.getBoundingClientRect()
     const p = screenToWorld(e.clientX - rect.left, e.clientY - rect.top)
-    const hit = props.world.spots.find((s) => pointInRect(p, s.rect))
+    const hit = props.world.spots.find((s) => pointInRotatedRect(p, s.rect, s.angle))
     if (hit) {
       props.onSelect(hit.id)
     }
@@ -131,8 +131,13 @@ function draw(ctx: CanvasRenderingContext2D, props: Props, view: View): void {
   ctx.lineWidth = 3
   ctx.setLineDash([8, 6])
   ctx.beginPath()
-  ctx.moveTo(sx(ent.x + 0.25), sy(0))
-  ctx.lineTo(sx(ent.x + ent.width - 0.25), sy(0))
+  if (ent.side === 'left') {
+    ctx.moveTo(sx(0), sy(ent.center - ent.width / 2 + 0.25))
+    ctx.lineTo(sx(0), sy(ent.center + ent.width / 2 - 0.25))
+  } else {
+    ctx.moveTo(sx(ent.center - ent.width / 2 + 0.25), sy(0))
+    ctx.lineTo(sx(ent.center + ent.width / 2 - 0.25), sy(0))
+  }
   ctx.stroke()
   ctx.setLineDash([])
 
@@ -162,8 +167,8 @@ function drawSpot(
   sy: (y: number) => number
 ): void {
   const r = spot.rect
-  const x = sx(r.x)
-  const y = sy(r.y + r.h)
+  const cx = sx(r.x + r.w / 2)
+  const cy = sy(r.y + r.h / 2)
   const w = r.w * (sx(1) - sx(0))
   const h = r.h * (sy(0) - sy(1))
 
@@ -171,17 +176,21 @@ function drawSpot(
   const selected = props.selectedSpotId === spot.id
   const occupied = props.occupied.has(spot.id)
 
+  ctx.save()
+  ctx.translate(cx, cy)
+  if (spot.angle !== 0) ctx.rotate(-spot.angle)
   ctx.fillStyle = occupied ? '#c2c9d0' : selected ? '#4f9d5b' : hovered ? '#a9d6ab' : '#f4f6f7'
   ctx.strokeStyle = selected ? '#2e6b38' : '#8a949d'
   ctx.lineWidth = selected ? 3 : 1.5
-  ctx.fillRect(x, y, w, h)
-  ctx.strokeRect(x, y, w, h)
+  ctx.fillRect(-w / 2, -h / 2, w, h)
+  ctx.strokeRect(-w / 2, -h / 2, w, h)
 
   ctx.fillStyle = occupied ? '#6b737c' : selected ? '#ffffff' : '#4a5560'
   ctx.font = `${Math.max(11, w * 0.22)}px "Segoe UI", sans-serif`
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
-  ctx.fillText(occupied ? '已停' : 'P', x + w / 2, y + h / 2)
+  ctx.fillText(occupied ? '已停' : 'P', 0, 0)
+  ctx.restore()
 }
 
 function drawPath(

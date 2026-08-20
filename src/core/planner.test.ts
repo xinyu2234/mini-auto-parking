@@ -7,9 +7,11 @@ import { createWorld } from './world'
 
 function smallWorld(): World {
   return {
+    layoutId: 'perpendicular',
+    layoutName: '测试场地',
     bounds: { x: 0, y: 0, w: 10, h: 6 },
     wallThickness: 0.3,
-    entrance: { x: 4, width: 2 },
+    entrance: { side: 'bottom', center: 5, width: 2 },
     spots: [],
     obstacles: [],
     car: {
@@ -108,4 +110,30 @@ describe('hybrid A* planner', () => {
       expect(isPoseColliding(world, p)).toBe(false)
     }
   }, 15000)
+
+  it('parks into a parallel spot', () => {
+    const world = createWorld('parallel')
+    const spot = world.spots.find((s) => s.id === 'T1') as NonNullable<typeof world.spots[0]>
+    const result = planPath(world, world.startPose, spot.goalPose, 10000)
+    expect(result.status).toBe('found')
+    const end = result.path[result.path.length - 1]
+    expect(Math.hypot(end.x - spot.goalPose.x, end.y - spot.goalPose.y)).toBeLessThan(0.35)
+    expect(Math.abs(wrapPi(end.heading - spot.goalPose.heading))).toBeLessThan(0.12)
+    for (const p of result.path) {
+      expect(isPoseColliding(world, p)).toBe(false)
+    }
+  }, 20000)
+
+  it('parks into an angled spot', () => {
+    const world = createWorld('angled')
+    const spot = world.spots.find((s) => s.id === 'T1') as NonNullable<typeof world.spots[0]>
+    const result = planPath(world, world.startPose, spot.goalPose, 10000)
+    expect(result.status).toBe('found')
+    const end = result.path[result.path.length - 1]
+    expect(Math.hypot(end.x - spot.goalPose.x, end.y - spot.goalPose.y)).toBeLessThan(0.35)
+    expect(Math.abs(wrapPi(end.heading - spot.goalPose.heading))).toBeLessThan(0.12)
+    for (const p of result.path) {
+      expect(isPoseColliding(world, p)).toBe(false)
+    }
+  }, 20000)
 })

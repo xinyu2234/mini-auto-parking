@@ -1,13 +1,24 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { RotateCcw } from 'lucide-react'
+import type { LayoutId } from '../../core/types'
 import { ANIMATION } from '../../core/config'
-import { createWorld } from '../../core/world'
+import { createWorld, LAYOUT_OPTIONS } from '../../core/world'
 import { ParkingLotCanvas } from './ParkingLotCanvas'
 import { useParkingSimulation } from './useParkingSimulation'
 
 export function App(): JSX.Element {
-  const world = useMemo(() => createWorld(), [])
-  const sim = useParkingSimulation()
+  const [layoutId, setLayoutId] = useState<LayoutId>('perpendicular')
+  return <ParkingScene key={layoutId} layoutId={layoutId} onLayoutChange={setLayoutId} />
+}
+
+interface SceneProps {
+  layoutId: LayoutId
+  onLayoutChange: (id: LayoutId) => void
+}
+
+function ParkingScene({ layoutId, onLayoutChange }: SceneProps): JSX.Element {
+  const world = useMemo(() => createWorld(layoutId), [layoutId])
+  const sim = useParkingSimulation(layoutId)
 
   return (
     <div className="app">
@@ -32,6 +43,20 @@ export function App(): JSX.Element {
       <aside className="panel">
         <h1>自动泊车</h1>
         <section className="control-group">
+          <label>停车场布局</label>
+          <div className="segmented layout-switch">
+            {LAYOUT_OPTIONS.map((opt) => (
+              <button
+                key={opt.id}
+                className={layoutId === opt.id ? 'active' : ''}
+                onClick={() => onLayoutChange(opt.id)}
+              >
+                {opt.name}
+              </button>
+            ))}
+          </div>
+        </section>
+        <section className="control-group">
           <label>播放速度</label>
           <div className="segmented">
             {ANIMATION.speedOptions.map((v) => (
@@ -48,9 +73,7 @@ export function App(): JSX.Element {
         <section className="control-group">
           <label>场地</label>
           <p className="lot-info">
-            {world.spots.length} 个车位 · 顶部 {world.spots.filter((s) => s.id.startsWith('T')).length} ·
-            左墙 {world.spots.filter((s) => s.id.startsWith('L')).length} ·
-            右墙 {world.spots.filter((s) => s.id.startsWith('R')).length}
+            {world.layoutName} · {world.spots.length} 个车位
           </p>
         </section>
         <section className="control-group">

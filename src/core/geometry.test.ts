@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { pointInRect, pointsOverlap, rectCorners } from './geometry'
+import { pointInRect, pointInRotatedRect, pointsOverlap, rectCorners, rotatedRectCorners } from './geometry'
 
 describe('geometry', () => {
   it('detects overlapping rectangles', () => {
@@ -34,5 +34,14 @@ describe('geometry', () => {
     expect(pointInRect({ x: 2, y: 3 }, rect)).toBe(true)
     expect(pointInRect({ x: 3.9, y: 5.9 }, rect)).toBe(true)
     expect(pointInRect({ x: 0.9, y: 3 }, rect)).toBe(false)
+  })
+
+  it('handles rotated rect hit tests', () => {
+    const rect = { x: -3, y: -1, w: 6, h: 2 }
+    const angle = Math.PI / 2
+    expect(pointInRotatedRect({ x: 0, y: 0 }, rect, angle)).toBe(true)
+    expect(pointInRotatedRect({ x: 3.2, y: 0 }, rect, angle)).toBe(false)
+    const corners = rotatedRectCorners(rect, angle)
+    expect(corners.some((p) => Math.hypot(p.x - 1, p.y - 3) < 1e-9)).toBe(true)
   })
 })
