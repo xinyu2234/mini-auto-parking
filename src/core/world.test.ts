@@ -13,7 +13,7 @@ describe('randomized world generation', () => {
       expect(validateWorldLayout(world)).toEqual([])
       expect(world.spots.length).toBeGreaterThanOrEqual(4)
       expect(isPoseColliding(world, world.startPose)).toBe(false)
-      expect(world.spots.filter((s) => !s.occupied).length).toBeGreaterThanOrEqual(4)
+      expect(world.spots.filter((s) => !s.occupied).length).toBeGreaterThanOrEqual(2)
     }
   })
 
@@ -29,10 +29,23 @@ describe('randomized world generation', () => {
       for (const seed of SEEDS) {
         const world = createWorld(layoutId, seed)
         const free = world.spots.filter((s) => !s.occupied)
-        expect(free.length).toBeGreaterThanOrEqual(4)
+        expect(free.length).toBeGreaterThanOrEqual(2)
         expect(free.length).toBeLessThanOrEqual(world.spots.length)
       }
     }
+  })
+
+  it('can simulate peak-hour lots up to 80% occupancy', () => {
+    let peak = 0
+    for (const layoutId of LAYOUTS) {
+      for (let seed = 1; seed <= 40; seed++) {
+        const world = createWorld(layoutId, seed * 977)
+        const ratio = world.spots.filter((s) => s.occupied).length / world.spots.length
+        expect(ratio).toBeLessThanOrEqual(0.8 + 1e-9)
+        peak = Math.max(peak, ratio)
+      }
+    }
+    expect(peak).toBeGreaterThanOrEqual(0.7)
   })
 
   it('reproduces the same lot for the same seed', () => {

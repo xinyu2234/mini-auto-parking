@@ -10,7 +10,9 @@ import {
   validateWorldLayout
 } from './lotGeometry'
 
-const MIN_FREE_SPOTS = 4
+// Peak-hour lots can be almost full, so only a couple of free bays are kept.
+const MIN_FREE_SPOTS = 2
+const MAX_OCCUPANCY_RATIO = 0.8
 const MOUTH_CLEARANCE = 1.5
 const MIN_AISLE_REACH = 0.8
 
@@ -207,8 +209,8 @@ function assignOccupancy(world: World, rng: Rng): void {
     const j = Math.floor(rng() * (i + 1))
     ;[order[i], order[j]] = [order[j], order[i]]
   }
-  const ratio = jitter(rng, 0.15, 0.5)
-  const wanted = Math.round(world.spots.length * ratio)
+  const ratio = jitter(rng, 0.15, MAX_OCCUPANCY_RATIO)
+  const wanted = Math.floor(world.spots.length * ratio)
   const capacity = Math.max(0, world.spots.length - MIN_FREE_SPOTS)
   const taken = Math.min(wanted, capacity)
   for (let i = 0; i < taken; i++) world.spots[order[i]].occupied = true
