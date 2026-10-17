@@ -5,6 +5,7 @@ export {
   LOT_WIDTH,
   APPROACH_DEPTH,
   approachZone,
+  reachableFreeRatio,
   getSpotById,
   goalForSpot,
   hasApproachClearance,

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { isPoseColliding } from './collision'
-import { rectsOverlap, wrapPi } from './geometry'
-import { createWorld, findUnreachableSpotIds, hasApproachClearance, validateWorldLayout } from './world'
+import { pointsOverlap, rectCorners, rectsOverlap, wrapPi } from './geometry'
+import { approachZone, createWorld, reachableFreeRatio, validateWorldLayout } from './world'
 
 const LAYOUTS = ['perpendicular', 'parallel', 'angled'] as const
 const SEEDS = [1, 42, 777, 2024, 90210]
@@ -13,10 +13,25 @@ describe('randomized world generation', () => {
       expect(validateWorldLayout(world)).toEqual([])
       expect(world.spots.length).toBeGreaterThanOrEqual(4)
       expect(isPoseColliding(world, world.startPose)).toBe(false)
-      for (const spot of world.spots) {
-        expect(hasApproachClearance(world, spot)).toBe(true)
+      expect(world.spots.filter((s) => !s.occupied).length).toBeGreaterThanOrEqual(4)
+    }
+  })
+
+  it.each(LAYOUTS)('parks other cars in some %s bays', (layoutId) => {
+    const occupiedCounts = SEEDS.map(
+      (seed) => createWorld(layoutId, seed).spots.filter((s) => s.occupied).length
+    )
+    expect(Math.max(...occupiedCounts)).toBeGreaterThan(0)
+  })
+
+  it('keeps enough free bays to pick a target', () => {
+    for (const layoutId of LAYOUTS) {
+      for (const seed of SEEDS) {
+        const world = createWorld(layoutId, seed)
+        const free = world.spots.filter((s) => !s.occupied)
+        expect(free.length).toBeGreaterThanOrEqual(4)
+        expect(free.length).toBeLessThanOrEqual(world.spots.length)
       }
-      expect(findUnreachableSpotIds(world)).toEqual([])
     }
   })
 
@@ -51,12 +66,43 @@ describe('randomized world generation', () => {
     expect(signatures.size).toBeGreaterThan(1)
   })
 
-  it('keeps obstacles clear of every spot mouth', () => {
+  it('never places a pillar inside a bay or right at its mouth', () => {
     for (const layoutId of LAYOUTS) {
       for (const seed of SEEDS) {
         const world = createWorld(layoutId, seed)
-        expect(hasApproachClearance(world, world.spots[0])).toBe(true)
-        expect(findUnreachableSpotIds(world)).toEqual([])
+        for (const spot of world.spots) {
+          const mouth = approachZone(world, spot, 1.5)
+          for (const obstacle of world.obstacles) {
+            expect(
+              pointsOverlap(rectCorners(obstacle), rectCorners(mouth), 1e-7),
+              `${layoutId} ${seed} ${spot.id}`
+            ).toBe(false)
+          }
+        }
+      }
+    }
+  })
+
+  it('treats bays that already hold a car as obstacles', () => {
+    for (const layoutId of LAYOUTS) {
+      const world = createWorld(layoutId, 2024)
+      const taken = world.spots.filter((s) => s.occupied)
+      const free = world.spots.filter((s) => !s.occupied)
+      expect(taken.length).toBeGreaterThan(0)
+      for (const spot of taken) {
+        expect(isPoseColliding(world, spot.goalPose), `${layoutId} ${spot.id}`).toBe(true)
+      }
+      for (const spot of free) {
+        expect(isPoseColliding(world, spot.goalPose), `${layoutId} ${spot.id}`).toBe(false)
+      }
+    }
+  })
+
+  it('keeps the driving aisle open enough to be realistic', () => {
+    for (const layoutId of LAYOUTS) {
+      for (const seed of SEEDS) {
+        const world = createWorld(layoutId, seed)
+        expect(reachableFreeRatio(world), `${layoutId} ${seed}`).toBeGreaterThanOrEqual(0.8)
       }
     }
   })

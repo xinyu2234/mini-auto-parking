@@ -1,5 +1,5 @@
 import type { CarSpec, Pose, Rect, World } from './types'
-import { pointInRect, pointsOverlap, rectCorners } from './geometry'
+import { pointInRect, pointInRotatedRect, pointsOverlap, rectCorners, rotatedRectCorners } from './geometry'
 import { wallRects } from './world'
 
 export interface Point {
@@ -40,10 +40,17 @@ export function isPoseColliding(world: World, pose: Pose, margin = 1e-6): boolea
   for (const rect of solids) {
     if (pointsOverlap(corners, rectCorners(rect), 1e-5)) return true
   }
+
+  // Bays that already hold a parked car are solid obstacles as well.
+  for (const spot of world.spots) {
+    if (!spot.occupied) continue
+    if (pointsOverlap(corners, rotatedRectCorners(spot.rect, spot.angle), 1e-5)) return true
+  }
   return false
 }
 
 export function isPointInSolid(world: World, x: number, y: number): boolean {
   const solids: Rect[] = [...wallRects(world), ...world.obstacles]
-  return solids.some((r) => pointInRect({ x, y }, r))
+  if (solids.some((r) => pointInRect({ x, y }, r))) return true
+  return world.spots.some((s) => s.occupied && pointInRotatedRect({ x, y }, s.rect, s.angle))
 }

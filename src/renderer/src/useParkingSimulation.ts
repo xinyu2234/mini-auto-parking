@@ -208,6 +208,7 @@ export function useParkingSimulation(world: World): Simulation {
     (id: string) => {
       const spot = getSpotById(worldRef.current, id)
       if (!spot) return
+      if (spot.occupied) return
       if (occupiedRef.current.has(id)) return
       if (statusRef.current === 'planning' || statusRef.current === 'parking' || statusRef.current === 'reversing') {
         return

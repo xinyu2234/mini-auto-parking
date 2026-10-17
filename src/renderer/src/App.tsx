@@ -89,7 +89,8 @@ function ParkingScene({ layoutId, seed, onLayoutChange, onNewMap }: SceneProps):
         <section className="control-group">
           <label>场地</label>
           <p className="lot-info">
-            {world.layoutName} · {world.spots.length} 个车位
+            {world.layoutName} · 空闲 {world.spots.filter((s) => !s.occupied).length} / 共{' '}
+            {world.spots.length} 个车位
             <br />
             地图编号 #{world.mapSeed}
           </p>

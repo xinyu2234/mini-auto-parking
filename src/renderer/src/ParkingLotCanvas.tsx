@@ -86,7 +86,7 @@ export function ParkingLotCanvas(props: Props): JSX.Element {
     if (!canvas) return
     const rect = canvas.getBoundingClientRect()
     const p = screenToWorld(e.clientX - rect.left, e.clientY - rect.top)
-    const hit = props.world.spots.find((s) => pointInRotatedRect(p, s.rect, s.angle))
+    const hit = props.world.spots.find((s) => !s.occupied && pointInRotatedRect(p, s.rect, s.angle))
     props.onHover(hit ? hit.id : null)
   }
 
@@ -95,7 +95,7 @@ export function ParkingLotCanvas(props: Props): JSX.Element {
     if (!canvas) return
     const rect = canvas.getBoundingClientRect()
     const p = screenToWorld(e.clientX - rect.left, e.clientY - rect.top)
-    const hit = props.world.spots.find((s) => pointInRotatedRect(p, s.rect, s.angle))
+    const hit = props.world.spots.find((s) => !s.occupied && pointInRotatedRect(p, s.rect, s.angle))
     if (hit) {
       props.onSelect(hit.id)
     }
@@ -182,23 +182,61 @@ function drawSpot(
 
   const hovered = props.hoveredSpotId === spot.id
   const selected = props.selectedSpotId === spot.id
-  const occupied = props.occupied.has(spot.id)
+  const parkedByUs = props.occupied.has(spot.id)
+  const occupied = spot.occupied || parkedByUs
 
   ctx.save()
   ctx.translate(cx, cy)
   if (spot.angle !== 0) ctx.rotate(-spot.angle)
-  ctx.fillStyle = occupied ? '#c2c9d0' : selected ? '#4f9d5b' : hovered ? '#a9d6ab' : '#f4f6f7'
-  ctx.strokeStyle = selected ? '#2e6b38' : '#8a949d'
+  ctx.fillStyle = occupied ? '#c9ced4' : selected ? '#4f9d5b' : hovered ? '#a9d6ab' : '#f4f6f7'
+  ctx.strokeStyle = occupied ? '#9aa3ac' : selected ? '#2e6b38' : '#8a949d'
   ctx.lineWidth = selected ? 3 : 1.5
   ctx.fillRect(-w / 2, -h / 2, w, h)
   ctx.strokeRect(-w / 2, -h / 2, w, h)
 
-  ctx.fillStyle = occupied ? '#6b737c' : selected ? '#ffffff' : '#4a5560'
-  ctx.font = `${Math.max(11, w * 0.22)}px "Segoe UI", sans-serif`
+  if (spot.occupied) {
+    drawParkedCar(ctx, props.world, spot, w, h, sx(1) - sx(0))
+    ctx.restore()
+    return
+  }
+
+  ctx.fillStyle = parkedByUs ? '#6b737c' : selected ? '#ffffff' : '#4a5560'
+  ctx.font = `${Math.max(11, Math.min(w, h) * 0.28)}px "Segoe UI", sans-serif`
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
-  ctx.fillText(occupied ? '已停' : 'P', 0, 0)
+  ctx.fillText(parkedByUs ? '已停' : 'P', 0, 0)
   ctx.restore()
+}
+
+/** A bay that already holds a car is drawn as that car, inside the rotated bay frame. */
+function drawParkedCar(
+  ctx: CanvasRenderingContext2D,
+  world: World,
+  spot: Spot,
+  bayW: number,
+  bayH: number,
+  scale: number
+): void {
+  const alongX = bayW >= bayH
+  const len = Math.min(world.car.length, (alongX ? spot.rect.w : spot.rect.h) - 0.5) * scale
+  const wid = Math.min(world.car.width, (alongX ? spot.rect.h : spot.rect.w) - 0.3) * scale
+  const w = alongX ? len : wid
+  const h = alongX ? wid : len
+
+  ctx.fillStyle = '#7a828b'
+  ctx.strokeStyle = '#5b636b'
+  ctx.lineWidth = 1.5
+  ctx.beginPath()
+  ctx.roundRect(-w / 2, -h / 2, w, h, Math.min(w, h) * 0.28)
+  ctx.fill()
+  ctx.stroke()
+
+  ctx.fillStyle = '#aeb7c0'
+  if (alongX) {
+    ctx.fillRect(-len * 0.12, -wid * 0.34, len * 0.24, wid * 0.68)
+  } else {
+    ctx.fillRect(-wid * 0.34, -len * 0.12, wid * 0.68, len * 0.24)
+  }
 }
 
 function drawPath(

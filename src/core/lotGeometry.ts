@@ -1,6 +1,6 @@
 // Geometry primitives shared by the layout generator: bounds, walls and validation.
 import type { Entrance, LayoutId, Pose, Rect, Spot, World } from './types'
-import { pointsOverlap, rectCorners, rotatedRectCorners } from './geometry'
+import { pointInRotatedRect, pointsOverlap, rectCorners, rotatedRectCorners } from './geometry'
 
 export const LOT_WIDTH = 40
 export const LOT_HEIGHT = 20
@@ -242,6 +242,46 @@ const CAR_CLEARANCE = 1.2
  * reachable when the free space connects the start to the mouth of its spot.
  */
 export function findUnreachableSpotIds(world: World): string[] {
+  const fill = floodFill(world)
+  if (!fill) return world.spots.map((s) => s.id)
+  const { visited, nx, toCell } = fill
+  const unreachable: string[] = []
+  for (const spot of world.spots) {
+    if (spot.occupied) continue
+    const h = spot.goalPose.heading
+    const mouth = {
+      x: spot.goalPose.x + Math.cos(h) * APPROACH_DEPTH * 0.8,
+      y: spot.goalPose.y + Math.sin(h) * APPROACH_DEPTH * 0.8
+    }
+    if (!visited[toCell(mouth.x, mouth.y)]) unreachable.push(spot.id)
+  }
+  return unreachable
+}
+
+/**
+ * Share of the drivable area that can be reached from the entrance. A realistic
+ * lot keeps its aisle open even when individual bays are hard to use.
+ */
+export function reachableFreeRatio(world: World): number {
+  const fill = floodFill(world)
+  if (!fill) return 0
+  const { visited, passable } = fill
+  let reachable = 0
+  let total = 0
+  for (let i = 0; i < passable.length; i++) {
+    if (!passable[i]) continue
+    total++
+    if (visited[i]) reachable++
+  }
+  return total === 0 ? 0 : reachable / total
+}
+
+function floodFill(world: World): {
+  visited: Uint8Array
+  passable: Uint8Array
+  nx: number
+  toCell: (x: number, y: number) => number
+} | null {
   const b = world.bounds
   const nx = Math.ceil(b.w / REACH_CELL)
   const ny = Math.ceil(b.h / REACH_CELL)
@@ -253,6 +293,10 @@ export function findUnreachableSpotIds(world: World): string[] {
       const cx = b.x + (ix + 0.5) * REACH_CELL
       const cy = b.y + (iy + 0.5) * REACH_CELL
       let ok = 1
+      if (world.spots.some((s) => s.occupied && pointInRotatedRect({ x: cx, y: cy }, s.rect, s.angle))) {
+        passable[iy * nx + ix] = 0
+        continue
+      }
       for (const rect of solids) {
         if (distanceToRect(cx, cy, rect) < CAR_CLEARANCE) {
           ok = 0
@@ -271,7 +315,7 @@ export function findUnreachableSpotIds(world: World): string[] {
 
   const visited = new Uint8Array(nx * ny)
   const start = toCell(world.startPose.x, world.startPose.y)
-  if (!passable[start]) return world.spots.map((s) => s.id)
+  if (!passable[start]) return null
 
   const queue = new Int32Array(nx * ny)
   let head = 0
@@ -300,14 +344,5 @@ export function findUnreachableSpotIds(world: World): string[] {
     }
   }
 
-  const unreachable: string[] = []
-  for (const spot of world.spots) {
-    const h = spot.goalPose.heading
-    const mouth = {
-      x: spot.goalPose.x + Math.cos(h) * APPROACH_DEPTH * 0.8,
-      y: spot.goalPose.y + Math.sin(h) * APPROACH_DEPTH * 0.8
-    }
-    if (!visited[toCell(mouth.x, mouth.y)]) unreachable.push(spot.id)
-  }
-  return unreachable
+  return { visited, passable, nx, toCell }
 }

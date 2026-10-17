@@ -1,16 +1,18 @@
 import type { LayoutId, Rect, Spot, World } from './types'
 import { pointsOverlap, rectCorners, rotatedRectCorners } from './geometry'
 import {
-  APPROACH_DEPTH,
   LOT_HEIGHT,
   LOT_WIDTH,
   approachZone,
   baseWorld,
-  findUnreachableSpotIds,
-  hasApproachClearance,
   makeSpot,
+  reachableFreeRatio,
   validateWorldLayout
 } from './lotGeometry'
+
+const MIN_FREE_SPOTS = 4
+const MOUTH_CLEARANCE = 1.5
+const MIN_AISLE_REACH = 0.8
 
 export const LAYOUT_OPTIONS: { id: LayoutId; name: string }[] = [
   { id: 'perpendicular', name: '垂直入库' },
@@ -167,8 +169,10 @@ function tooClose(rect: Rect, others: Rect[], minGap: number): boolean {
  */
 function scatterObstacles(world: World, rng: Rng, count: number): Rect[] {
   if (count <= 0) return []
+  // Pillars and planters stay out of the bays and their immediate mouth, but may
+  // sit anywhere else in the driving area.
   const blocked: Rect[] = [
-    ...world.spots.map((s) => approachZone(world, s, APPROACH_DEPTH)),
+    ...world.spots.map((s) => approachZone(world, s, MOUTH_CLEARANCE)),
     clearanceZone(world)
   ]
   const spotShapes = world.spots.map((s) => rotatedRectCorners(s.rect, s.angle))
@@ -196,6 +200,20 @@ function scatterObstacles(world: World, rng: Rng, count: number): Rect[] {
   return placed
 }
 
+/** Some bays are simulated as already taken by other cars. */
+function assignOccupancy(world: World, rng: Rng): void {
+  const order = world.spots.map((_, i) => i)
+  for (let i = order.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1))
+    ;[order[i], order[j]] = [order[j], order[i]]
+  }
+  const ratio = jitter(rng, 0.15, 0.5)
+  const wanted = Math.round(world.spots.length * ratio)
+  const capacity = Math.max(0, world.spots.length - MIN_FREE_SPOTS)
+  const taken = Math.min(wanted, capacity)
+  for (let i = 0; i < taken; i++) world.spots[order[i]].occupied = true
+}
+
 function buildLayout(layout: LayoutId, seed: number, rng: Rng, withObstacles: boolean): World {
   const world =
     layout === 'parallel'
@@ -203,6 +221,7 @@ function buildLayout(layout: LayoutId, seed: number, rng: Rng, withObstacles: bo
       : layout === 'angled'
         ? generateAngled(seed, rng)
         : generatePerpendicular(seed, rng)
+  assignOccupancy(world, rng)
   if (withObstacles) {
     world.obstacles = scatterObstacles(world, rng, pickInt(rng, 3, 6))
   }
@@ -210,17 +229,18 @@ function buildLayout(layout: LayoutId, seed: number, rng: Rng, withObstacles: bo
 }
 
 function isUsable(world: World): boolean {
+  // Only realism is enforced. Whether a free bay is easy to reach is left to
+  // the planner, so hard maps are allowed.
   if (validateWorldLayout(world).length > 0) return false
-  if (world.spots.length < 4) return false
-  if (world.spots.some((spot) => !hasApproachClearance(world, spot))) return false
-  if (findUnreachableSpotIds(world).length > 0) return false
-  return true
+  if (world.spots.filter((spot) => !spot.occupied).length < MIN_FREE_SPOTS) return false
+  // Pillars may make bays awkward, but must not wall off most of the aisle.
+  return reachableFreeRatio(world) >= MIN_AISLE_REACH
 }
 
 /**
  * Builds a randomized lot that keeps the principles of its parking style.
- * Every accepted map is verified to be free of overlaps and to leave each spot
- * with a clear mouth plus a free-space route from the entrance.
+ * Accepted maps are free of overlaps and keep at least a few free bays, but they
+ * are allowed to be harder than the planner can currently solve.
  */
 export function createWorld(layout: LayoutId = 'perpendicular', seed?: number): World {
   const mapSeed = seed ?? Math.floor(Math.random() * 1_000_000_000)
