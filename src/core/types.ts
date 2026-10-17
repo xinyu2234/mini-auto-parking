@@ -40,6 +40,7 @@ export interface Entrance {
 export interface World {
   layoutId: LayoutId
   layoutName: string
+  mapSeed: number
   bounds: Rect
   wallThickness: number
   entrance: Entrance

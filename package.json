@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "check:maps": "vite-node scripts/map-sweep.ts",
     "build:win": "npm run build && electron-builder --win"
   },
   "dependencies": {

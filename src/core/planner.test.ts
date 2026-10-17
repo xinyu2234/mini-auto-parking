@@ -9,6 +9,7 @@ function smallWorld(): World {
   return {
     layoutId: 'perpendicular',
     layoutName: '测试场地',
+    mapSeed: 1,
     bounds: { x: 0, y: 0, w: 10, h: 6 },
     wallThickness: 0.3,
     entrance: { side: 'bottom', center: 5, width: 2 },
@@ -66,14 +67,14 @@ describe('hybrid A* planner', () => {
   })
 
   it('times out under a tiny budget', () => {
-    const world = createWorld()
+    const world = createWorld('perpendicular', 4242)
     const spot = world.spots[0]
     const result = planPath(world, world.startPose, spot.goalPose, 0.2)
     expect(result.status).toBe('timeout')
   })
 
   it('parks into a real side spot', () => {
-    const world = createWorld()
+    const world = createWorld('perpendicular', 4242)
     const spot = world.spots.find((s) => s.id === 'L1') as NonNullable<typeof world.spots[0]>
     const result = planPath(world, world.startPose, spot.goalPose, 8000)
     expect(result.status).toBe('found')
@@ -86,7 +87,7 @@ describe('hybrid A* planner', () => {
   }, 15000)
 
   it('parks into a real top spot', () => {
-    const world = createWorld()
+    const world = createWorld('perpendicular', 4242)
     const spot = world.spots.find((s) => s.id === 'T2') as NonNullable<typeof world.spots[0]>
     const result = planPath(world, world.startPose, spot.goalPose, 8000)
     expect(result.status).toBe('found')
@@ -99,7 +100,7 @@ describe('hybrid A* planner', () => {
   }, 15000)
 
   it('parks into a real right spot', () => {
-    const world = createWorld()
+    const world = createWorld('perpendicular', 4242)
     const spot = world.spots.find((s) => s.id === 'R2') as NonNullable<typeof world.spots[0]>
     const result = planPath(world, world.startPose, spot.goalPose, 8000)
     expect(result.status).toBe('found')
@@ -112,7 +113,7 @@ describe('hybrid A* planner', () => {
   }, 15000)
 
   it('parks into a parallel spot', () => {
-    const world = createWorld('parallel')
+    const world = createWorld('parallel', 4242)
     const spot = world.spots.find((s) => s.id === 'T1') as NonNullable<typeof world.spots[0]>
     const result = planPath(world, world.startPose, spot.goalPose, 10000)
     expect(result.status).toBe('found')
@@ -125,7 +126,7 @@ describe('hybrid A* planner', () => {
   }, 20000)
 
   it('parks into an angled spot', () => {
-    const world = createWorld('angled')
+    const world = createWorld('angled', 4242)
     const spot = world.spots.find((s) => s.id === 'T1') as NonNullable<typeof world.spots[0]>
     const result = planPath(world, world.startPose, spot.goalPose, 10000)
     expect(result.status).toBe('found')
@@ -136,4 +137,20 @@ describe('hybrid A* planner', () => {
       expect(isPoseColliding(world, p)).toBe(false)
     }
   }, 20000)
+
+  it.each(['perpendicular', 'parallel', 'angled'] as const)(
+    'solves several spots on a freshly generated %s map',
+    (layoutId) => {
+      const world = createWorld(layoutId, 2468)
+      const picks = [world.spots[0], world.spots[world.spots.length - 1]]
+      for (const spot of picks) {
+        const result = planPath(world, world.startPose, spot.goalPose, 9000)
+        expect(result.status, `${layoutId} ${spot.id}`).toBe('found')
+        for (const p of result.path) {
+          expect(isPoseColliding(world, p)).toBe(false)
+        }
+      }
+    },
+    40000
+  )
 })

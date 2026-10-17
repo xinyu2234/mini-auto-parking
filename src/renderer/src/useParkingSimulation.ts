@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { LayoutId, PathSample, PlannerResult, Pose, World } from '../../core/types'
+import type { PathSample, PlannerResult, Pose, World } from '../../core/types'
 import { ANIMATION, RETRY } from '../../core/config'
 import { buildReverseSegment } from '../../core/retry'
-import { createWorld, getSpotById } from '../../core/world'
+import { getSpotById } from '../../core/world'
 import { pathLength, sampleAt } from './pathUtils'
 
 export type AppStatus = 'idle' | 'planning' | 'reversing' | 'parking' | 'done' | 'failed'
@@ -40,8 +40,8 @@ function statusText(status: AppStatus): string {
   }
 }
 
-export function useParkingSimulation(layoutId: LayoutId): Simulation {
-  const worldRef = useRef<World>(createWorld(layoutId))
+export function useParkingSimulation(world: World): Simulation {
+  const worldRef = useRef<World>(world)
   const [status, setStatus] = useState<AppStatus>('idle')
   const [selectedSpotId, setSelectedSpotId] = useState<string | null>(null)
   const [hoveredSpotId, setHoveredSpotId] = useState<string | null>(null)

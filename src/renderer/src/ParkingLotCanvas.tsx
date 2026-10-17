@@ -26,11 +26,23 @@ export function ParkingLotCanvas(props: Props): JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const viewRef = useRef<View>({ scale: 40, left: 40, top: 40 })
+  const propsRef = useRef<Props>(props)
+  const renderRef = useRef<() => void>(() => {})
+  propsRef.current = props
 
   useEffect(() => {
     const container = containerRef.current
     const canvas = canvasRef.current
     if (!container || !canvas) return
+
+    const render = () => {
+      const ctx = canvas.getContext('2d')
+      if (!ctx) return
+      const dpr = window.devicePixelRatio || 1
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+      draw(ctx, propsRef.current, viewRef.current)
+    }
+    renderRef.current = render
 
     const resize = () => {
       const w = container.clientWidth
@@ -46,6 +58,8 @@ export function ParkingLotCanvas(props: Props): JSX.Element {
         left: (w - LOT_WIDTH * scale) / 2,
         top: (h - LOT_HEIGHT * scale) / 2
       }
+      // Resizing a canvas clears its bitmap, so repaint right away.
+      render()
     }
     resize()
     const observer = new ResizeObserver(resize)
@@ -54,13 +68,7 @@ export function ParkingLotCanvas(props: Props): JSX.Element {
   }, [])
 
   useEffect(() => {
-    const canvas = canvasRef.current
-    if (!canvas) return
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return
-    const dpr = window.devicePixelRatio || 1
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-    draw(ctx, props, viewRef.current)
+    renderRef.current()
   })
 
   const worldToScreen = (x: number, y: number): { x: number; y: number } => {

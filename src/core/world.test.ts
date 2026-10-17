@@ -1,34 +1,96 @@
 import { describe, expect, it } from 'vitest'
 import { isPoseColliding } from './collision'
 import { rectsOverlap, wrapPi } from './geometry'
-import { createWorld, validateWorldLayout } from './world'
+import { createWorld, findUnreachableSpotIds, hasApproachClearance, validateWorldLayout } from './world'
 
-describe('world', () => {
-  it.each(['perpendicular', 'parallel', 'angled'] as const)(
-    'generates a valid %s layout',
-    (layoutId) => {
-      const world = createWorld(layoutId)
-      expect(world.layoutName.length).toBeGreaterThan(0)
-      expect(world.spots.length).toBeGreaterThanOrEqual(4)
+const LAYOUTS = ['perpendicular', 'parallel', 'angled'] as const
+const SEEDS = [1, 42, 777, 2024, 90210]
+
+describe('randomized world generation', () => {
+  it.each(LAYOUTS)('keeps the %s layout valid across many seeds', (layoutId) => {
+    for (const seed of SEEDS) {
+      const world = createWorld(layoutId, seed)
       expect(validateWorldLayout(world)).toEqual([])
+      expect(world.spots.length).toBeGreaterThanOrEqual(4)
       expect(isPoseColliding(world, world.startPose)).toBe(false)
       for (const spot of world.spots) {
-        expect(spot.goalPose).toBeDefined()
+        expect(hasApproachClearance(world, spot)).toBe(true)
+      }
+      expect(findUnreachableSpotIds(world)).toEqual([])
+    }
+  })
+
+  it('reproduces the same lot for the same seed', () => {
+    for (const layoutId of LAYOUTS) {
+      const a = createWorld(layoutId, 31415)
+      const b = createWorld(layoutId, 31415)
+      expect(JSON.stringify(a.spots)).toBe(JSON.stringify(b.spots))
+      expect(JSON.stringify(a.obstacles)).toBe(JSON.stringify(b.obstacles))
+    }
+  })
+
+  it.each(LAYOUTS)('produces different maps for different seeds in %s', (layoutId) => {
+    const signatures = new Set<string>()
+    for (const seed of SEEDS) {
+      const world = createWorld(layoutId, seed)
+      const signature = world.spots
+        .map((s) => `${s.rect.x.toFixed(2)},${s.rect.y.toFixed(2)}`)
+        .join('|')
+      signatures.add(signature)
+    }
+    expect(signatures.size).toBeGreaterThan(1)
+  })
+
+  it('randomizes obstacle placement', () => {
+    const signatures = new Set<string>()
+    for (const seed of SEEDS) {
+      const world = createWorld('perpendicular', seed)
+      expect(world.obstacles.length).toBeGreaterThan(0)
+      signatures.add(world.obstacles.map((o) => `${o.x.toFixed(1)},${o.y.toFixed(1)}`).join('|'))
+    }
+    expect(signatures.size).toBeGreaterThan(1)
+  })
+
+  it('keeps obstacles clear of every spot mouth', () => {
+    for (const layoutId of LAYOUTS) {
+      for (const seed of SEEDS) {
+        const world = createWorld(layoutId, seed)
+        expect(hasApproachClearance(world, world.spots[0])).toBe(true)
+        expect(findUnreachableSpotIds(world)).toEqual([])
       }
     }
-  )
+  })
+
+  it('generates maps quickly enough for a UI button', () => {
+    const started = Date.now()
+    for (const layoutId of LAYOUTS) {
+      for (const seed of SEEDS) createWorld(layoutId, seed)
+    }
+    expect(Date.now() - started).toBeLessThan(5000)
+  })
+})
+
+describe('layout principles', () => {
+  it.each(LAYOUTS)('keeps the %s layout name and spot goals', (layoutId) => {
+    const world = createWorld(layoutId, 4242)
+    expect(world.layoutName.length).toBeGreaterThan(0)
+    expect(world.spots.length).toBeGreaterThanOrEqual(4)
+    for (const spot of world.spots) {
+      expect(spot.goalPose).toBeDefined()
+    }
+  })
 
   it('rotates spots only in the angled layout', () => {
-    const angled = createWorld('angled')
-    const perpendicular = createWorld('perpendicular')
-    const parallel = createWorld('parallel')
+    const angled = createWorld('angled', 4242)
+    const perpendicular = createWorld('perpendicular', 4242)
+    const parallel = createWorld('parallel', 4242)
     expect(angled.spots.some((s) => s.angle !== 0)).toBe(true)
     expect(perpendicular.spots.every((s) => s.angle === 0)).toBe(true)
     expect(parallel.spots.every((s) => s.angle === 0)).toBe(true)
   })
 
   it('packs perpendicular spots tightly like comb teeth', () => {
-    const world = createWorld('perpendicular')
+    const world = createWorld('perpendicular', 4242)
     const tops = world.spots
       .filter((s) => s.id.startsWith('T'))
       .sort((a, b) => a.rect.x - b.rect.x)
@@ -40,7 +102,7 @@ describe('world', () => {
   })
 
   it('orients parallel spots along the horizontal road', () => {
-    const world = createWorld('parallel')
+    const world = createWorld('parallel', 4242)
     expect(world.spots.length).toBeGreaterThanOrEqual(4)
     for (const spot of world.spots) {
       expect(spot.rect.w).toBeGreaterThan(spot.rect.h)
@@ -49,7 +111,7 @@ describe('world', () => {
   })
 
   it('keeps parallel spots close to the long sides', () => {
-    const world = createWorld('parallel')
+    const world = createWorld('parallel', 4242)
     const tops = world.spots.filter((s) => s.id.startsWith('T'))
     const bottoms = world.spots.filter((s) => s.id.startsWith('B'))
     expect(tops.length).toBeGreaterThan(0)
@@ -63,7 +125,7 @@ describe('world', () => {
   })
 
   it('aligns angled spot headings with the slot long axis', () => {
-    const world = createWorld('angled')
+    const world = createWorld('angled', 4242)
     for (const spot of world.spots) {
       const longAxis = spot.angle + Math.PI / 2
       expect(Math.abs(wrapPi(spot.goalPose.heading - longAxis))).toBeLessThan(0.01)
@@ -71,7 +133,7 @@ describe('world', () => {
   })
 
   it('contains at least four parking spots with nose-out goals', () => {
-    const world = createWorld()
+    const world = createWorld('perpendicular', 4242)
     expect(world.spots.length).toBeGreaterThanOrEqual(4)
     for (const spot of world.spots) {
       expect(spot.goalPose).toBeDefined()
@@ -79,17 +141,17 @@ describe('world', () => {
   })
 
   it('starts the car inside the lot without collision', () => {
-    const world = createWorld()
+    const world = createWorld('perpendicular', 4242)
     expect(isPoseColliding(world, world.startPose)).toBe(false)
   })
 
   it('enforces the non-overlap rule for the generated layout', () => {
-    const world = createWorld()
+    const world = createWorld('perpendicular', 4242)
     expect(validateWorldLayout(world)).toEqual([])
   })
 
   it('keeps every spot and obstacle inside the lot bounds', () => {
-    const world = createWorld()
+    const world = createWorld('perpendicular', 4242)
     const b = world.bounds
     for (const spot of world.spots) {
       const r = spot.rect
@@ -107,7 +169,7 @@ describe('world', () => {
   })
 
   it('has no spot-spot, obstacle-obstacle or spot-obstacle overlaps', () => {
-    const world = createWorld()
+    const world = createWorld('perpendicular', 4242)
     for (let i = 0; i < world.spots.length; i++) {
       for (let j = i + 1; j < world.spots.length; j++) {
         expect(rectsOverlap(world.spots[i].rect, world.spots[j].rect, 1e-9)).toBe(false)
@@ -124,7 +186,7 @@ describe('world', () => {
   })
 
   it('leaves the entrance opening unblocked', () => {
-    const world = createWorld()
+    const world = createWorld('perpendicular', 4242)
     const entrance =
       world.entrance.side === 'left'
         ? {
@@ -148,7 +210,7 @@ describe('world', () => {
   })
 
   it('rejects a layout with overlapping spots', () => {
-    const world = createWorld()
+    const world = createWorld('perpendicular', 4242)
     world.spots[0].rect = { ...world.spots[1].rect }
     const errors = validateWorldLayout(world)
     expect(errors.some((e) => e.includes('重叠'))).toBe(true)
