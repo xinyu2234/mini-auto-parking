@@ -23,6 +23,7 @@ export interface Spot {
   id: string
   rect: Rect
   angle: number
+  polygon?: { x: number; y: number }[]
   goalPose: Pose
   occupied: boolean
 }
@@ -46,6 +47,7 @@ export interface World {
   entrance: Entrance
   spots: Spot[]
   obstacles: Rect[]
+  dividerWalls: Rect[]
   car: CarSpec
   startPose: Pose
 }

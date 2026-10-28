@@ -1,5 +1,6 @@
 import type { CarSpec, Pose, Rect, World } from './types'
-import { pointInRect, pointInRotatedRect, pointsOverlap, rectCorners, rotatedRectCorners } from './geometry'
+import { pointInPolygon, pointInRect, pointsOverlap, rectCorners } from './geometry'
+import { spotCorners } from './lotGeometry'
 import { wallRects } from './world'
 
 export interface Point {
@@ -36,7 +37,17 @@ export function isPoseColliding(world: World, pose: Pose, margin = 1e-6): boolea
   }
 
   const corners = carCorners(pose, world.car)
-  const solids: Rect[] = [...wallRects(world), ...world.obstacles]
+  let minX = Infinity
+  let minY = Infinity
+  let maxX = -Infinity
+  let maxY = -Infinity
+  for (const p of corners) {
+    minX = Math.min(minX, p.x)
+    minY = Math.min(minY, p.y)
+    maxX = Math.max(maxX, p.x)
+    maxY = Math.max(maxY, p.y)
+  }
+  const solids: Rect[] = [...wallRects(world), ...world.obstacles, ...world.dividerWalls]
   for (const rect of solids) {
     if (pointsOverlap(corners, rectCorners(rect), 1e-5)) return true
   }
@@ -44,13 +55,22 @@ export function isPoseColliding(world: World, pose: Pose, margin = 1e-6): boolea
   // Bays that already hold a parked car are solid obstacles as well.
   for (const spot of world.spots) {
     if (!spot.occupied) continue
-    if (pointsOverlap(corners, rotatedRectCorners(spot.rect, spot.angle), 1e-5)) return true
+    const b = spot.rect
+    if (b.x > maxX + 1e-5 || b.x + b.w < minX - 1e-5 || b.y > maxY + 1e-5 || b.y + b.h < minY - 1e-5) {
+      continue
+    }
+    if (pointsOverlap(corners, spotCorners(spot), 1e-5)) return true
   }
   return false
 }
 
 export function isPointInSolid(world: World, x: number, y: number): boolean {
-  const solids: Rect[] = [...wallRects(world), ...world.obstacles]
+  const solids: Rect[] = [...wallRects(world), ...world.obstacles, ...world.dividerWalls]
   if (solids.some((r) => pointInRect({ x, y }, r))) return true
-  return world.spots.some((s) => s.occupied && pointInRotatedRect({ x, y }, s.rect, s.angle))
+  return world.spots.some((s) => {
+    if (!s.occupied) return false
+    const r = s.rect
+    if (x < r.x || x > r.x + r.w || y < r.y || y > r.y + r.h) return false
+    return pointInPolygon({ x, y }, spotCorners(s))
+  })
 }

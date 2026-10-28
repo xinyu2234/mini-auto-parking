@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { isPoseColliding } from './collision'
-import { pointsOverlap, rectCorners, rectsOverlap, wrapPi } from './geometry'
+import { pointsOverlap, rectCorners, rectsOverlap, rotatedRectCorners, wrapPi } from './geometry'
 import { approachZone, createWorld, reachableFreeRatio, validateWorldLayout } from './world'
 
 const LAYOUTS = ['perpendicular', 'parallel', 'angled'] as const
@@ -144,8 +144,9 @@ describe('layout principles', () => {
     const perpendicular = createWorld('perpendicular', 4242)
     const parallel = createWorld('parallel', 4242)
     expect(angled.spots.some((s) => s.angle !== 0)).toBe(true)
-    expect(perpendicular.spots.every((s) => s.angle === 0)).toBe(true)
-    expect(parallel.spots.every((s) => s.angle === 0)).toBe(true)
+    expect(angled.spots.every((s) => !s.polygon)).toBe(true)
+    expect(perpendicular.spots.every((s) => !s.polygon)).toBe(true)
+    expect(parallel.spots.every((s) => !s.polygon)).toBe(true)
   })
 
   it('packs perpendicular spots tightly like comb teeth', () => {
@@ -187,7 +188,8 @@ describe('layout principles', () => {
     const world = createWorld('angled', 4242)
     for (const spot of world.spots) {
       const longAxis = spot.angle + Math.PI / 2
-      expect(Math.abs(wrapPi(spot.goalPose.heading - longAxis))).toBeLessThan(0.01)
+      const diff = wrapPi(spot.goalPose.heading - longAxis)
+      expect(Math.abs(Math.sin(diff))).toBeLessThan(0.01)
     }
   })
 
@@ -273,5 +275,88 @@ describe('layout principles', () => {
     world.spots[0].rect = { ...world.spots[1].rect }
     const errors = validateWorldLayout(world)
     expect(errors.some((e) => e.includes('重叠'))).toBe(true)
+  })
+})
+
+describe('expanded map geometry', () => {
+  it.each(['perpendicular', 'angled'] as const)('expands %s to about four times the original area', (layoutId) => {
+    const world = createWorld(layoutId, 777)
+    expect(world.bounds.w).toBe(80)
+    expect(world.bounds.h).toBe(40)
+    expect(world.bounds.w * world.bounds.h).toBeGreaterThanOrEqual(40 * 20 * 3)
+  })
+
+  it('expands the parallel map to about twice the original area', () => {
+    const world = createWorld('parallel', 777)
+    expect(world.bounds.w).toBe(80)
+    expect(world.bounds.h).toBe(20)
+    expect(world.bounds.w * world.bounds.h).toBe(40 * 20 * 2)
+  })
+
+  it('places uniformly sized double-loaded divider islands in the perpendicular map', () => {
+    const world = createWorld('perpendicular', 777)
+    expect(world.bounds.w).toBe(80)
+    expect(world.dividerWalls.length).toBeGreaterThanOrEqual(2)
+    const lengths = world.dividerWalls.map((w) => w.h)
+    for (const length of lengths) expect(length).toBeCloseTo(lengths[0], 5)
+    for (const wall of world.dividerWalls) expect(wall.h).toBeGreaterThan(wall.w)
+
+    const leftBays = world.spots.filter((s) => /^C\d+L/.test(s.id))
+    const rightBays = world.spots.filter((s) => /^C\d+R/.test(s.id))
+    expect(leftBays.length).toBeGreaterThanOrEqual(10)
+    expect(rightBays.length).toBeGreaterThanOrEqual(10)
+    for (const spot of leftBays) expect(Math.abs(wrapPi(spot.goalPose.heading - Math.PI))).toBeLessThan(0.01)
+    for (const spot of rightBays) expect(Math.abs(wrapPi(spot.goalPose.heading))).toBeLessThan(0.01)
+  })
+
+  it('draws parallel bays nose-to-tail with zero or tiny gaps', () => {
+    let zeroGapCount = 0
+    for (const seed of [1, 777, 2024]) {
+      const world = createWorld('parallel', seed)
+      for (const prefix of ['T', 'B']) {
+        const row = world.spots
+          .filter((s) => s.id.startsWith(prefix))
+          .sort((a, b) => a.rect.x - b.rect.x)
+        expect(row.length).toBeGreaterThanOrEqual(8)
+        for (let i = 1; i < row.length; i++) {
+          const gap = row[i].rect.x - (row[i - 1].rect.x + row[i - 1].rect.w)
+          expect(gap).toBeGreaterThanOrEqual(-1e-9)
+          expect(gap).toBeLessThanOrEqual(0.15 + 1e-9)
+          if (gap < 1e-9) zeroGapCount++
+        }
+      }
+    }
+    expect(zeroGapCount).toBeGreaterThan(0)
+  })
+
+  it('builds tight herringbone rows in the expanded angled map', () => {
+    const world = createWorld('angled', 777)
+    expect(world.bounds.w).toBe(80)
+    expect(world.bounds.h).toBe(40)
+    for (const prefix of ['TO', 'TI', 'BI', 'BO']) {
+      const row = world.spots
+        .filter((s) => s.id.startsWith(prefix))
+        .sort((a, b) => a.goalPose.x - b.goalPose.x)
+      expect(row.length).toBeGreaterThanOrEqual(11)
+      for (let i = 1; i < row.length; i++) {
+        const a = row[i - 1]
+        const b = row[i]
+        const dx = b.goalPose.x - a.goalPose.x
+        const longAxis = a.angle + Math.PI / 2
+        // Perpendicular distance between the parallel long edges is exactly the
+        // bay width, so the long edges touch. The mouth edges stay staggered.
+        expect(Math.abs(dx * Math.sin(longAxis))).toBeCloseTo(a.rect.w, 4)
+        expect(Math.abs(dx)).toBeLessThan(a.rect.h)
+      }
+    }
+    for (const spot of world.spots) {
+      const longAxis = spot.angle + Math.PI / 2
+      expect(Math.abs(Math.sin(wrapPi(spot.goalPose.heading - longAxis)))).toBeLessThan(0.01)
+    }
+    const minX = Math.min(
+      ...world.spots.flatMap((spot) => rotatedRectCorners(spot.rect, spot.angle).map((p) => p.x))
+    )
+    // Keep a turning apron beside the left-side entrance.
+    expect(minX).toBeGreaterThanOrEqual(8 - 1e-6)
   })
 })

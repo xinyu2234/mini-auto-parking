@@ -12,7 +12,7 @@ describe('retry reverse segment', () => {
 
   it('stops before leaving the lot boundary', () => {
     const world = createWorld()
-    const samples = buildReverseSegment(world, { x: 20, y: 0.15, heading: Math.PI / 2 }, 1.2)
+    const samples = buildReverseSegment(world, { x: 40, y: 0.15, heading: Math.PI / 2 }, 1.2)
     expect(samples.length).toBeLessThan(12)
     expect(samples[samples.length - 1].y).toBeGreaterThanOrEqual(0)
   })

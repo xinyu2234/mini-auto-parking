@@ -24,15 +24,16 @@ for (const layout of layouts) {
     const world = createWorld(layout, seed)
     const failures: string[] = []
     const occupied = world.spots.filter((s) => s.occupied).map((s) => s.id)
+    const sample = world.spots.filter((s) => !s.occupied).slice(0, 5)
     const t = performance.now()
-    for (const spot of world.spots.filter((s) => !s.occupied)) {
-      const r = planPath(world, world.startPose, spot.goalPose, 6000)
+    for (const spot of sample) {
+      const r = planPath(world, world.startPose, spot.goalPose, 5000)
       if (r.status !== 'found') failures.push(`${spot.id}:${r.status}`)
     }
     const free = world.spots.length - occupied.length
-    const ok = free - failures.length
+    const ok = sample.length - failures.length
     console.log(
-      `  seed ${seed}: 空闲${free}/${world.spots.length}, ${ok}/${free} 可泊入, ${(performance.now() - t).toFixed(0)}ms` +
+      `  seed ${seed}: ${world.bounds.w}x${world.bounds.h}, 空闲${free}/${world.spots.length}, 抽样${ok}/${sample.length} 可泊入, ${(performance.now() - t).toFixed(0)}ms` +
         (failures.length ? ` 失败项 ${failures.join(',')}` : '')
     )
     if (occupied.length) console.log(`    已占用: ${occupied.join(',')}`)

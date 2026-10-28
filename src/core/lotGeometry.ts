@@ -31,7 +31,9 @@ export function baseWorld(
   layoutId: LayoutId,
   layoutName: string,
   entrance: Entrance,
-  mapSeed: number
+  mapSeed: number,
+  width = LOT_WIDTH,
+  height = LOT_HEIGHT
 ): Omit<World, 'spots' | 'obstacles'> {
   const car = {
     length: 4.0,
@@ -44,9 +46,10 @@ export function baseWorld(
     layoutId,
     layoutName,
     mapSeed,
-    bounds: { x: 0, y: 0, w: LOT_WIDTH, h: LOT_HEIGHT },
+    bounds: { x: 0, y: 0, w: width, h: height },
     wallThickness: 0.3,
     entrance,
+    dividerWalls: [],
     car,
     startPose:
       entrance.side === 'left'
@@ -86,12 +89,15 @@ export function goalForSpot(spot: Spot): Pose {
   return spot.goalPose
 }
 
+export function spotCorners(spot: Spot): { x: number; y: number }[] {
+  return spot.polygon ?? rotatedRectCorners(spot.rect, spot.angle)
+}
+
 export function validateWorldLayout(world: World): string[] {
   const errors: string[] = []
   const b = world.bounds
   const eps = 1e-6
 
-  const spotCorners = (spot: Spot) => rotatedRectCorners(spot.rect, spot.angle)
   const withinBounds = (corners: { x: number; y: number }[], label: string): void => {
     for (const p of corners) {
       if (p.x < -eps || p.y < -eps || p.x > b.w + eps || p.y > b.h + eps) {
@@ -106,6 +112,9 @@ export function validateWorldLayout(world: World): string[] {
   }
   for (let i = 0; i < world.obstacles.length; i++) {
     withinBounds(rectCorners(world.obstacles[i]), `障碍物 ${i + 1}`)
+  }
+  for (let i = 0; i < world.dividerWalls.length; i++) {
+    withinBounds(rectCorners(world.dividerWalls[i]), `内部墙体 ${i + 1}`)
   }
 
   for (let i = 0; i < world.spots.length; i++) {
@@ -128,6 +137,19 @@ export function validateWorldLayout(world: World): string[] {
     for (let j = 0; j < world.obstacles.length; j++) {
       if (pointsOverlap(spotCorners(spot), rectCorners(world.obstacles[j]), 1e-7)) {
         errors.push(`车位 ${spot.id} 与障碍物 ${j + 1} 重叠`)
+      }
+    }
+  }
+
+  for (let i = 0; i < world.dividerWalls.length; i++) {
+    for (const spot of world.spots) {
+      if (pointsOverlap(rectCorners(world.dividerWalls[i]), spotCorners(spot), 1e-7)) {
+        errors.push(`车位 ${spot.id} 与内部墙体 ${i + 1} 重叠`)
+      }
+    }
+    for (let j = 0; j < world.obstacles.length; j++) {
+      if (pointsOverlap(rectCorners(world.dividerWalls[i]), rectCorners(world.obstacles[j]), 1e-7)) {
+        errors.push(`障碍物 ${j + 1} 与内部墙体 ${i + 1} 重叠`)
       }
     }
   }
@@ -211,7 +233,7 @@ export function approachZone(world: World, spot: Spot, depth = APPROACH_DEPTH): 
 }
 
 function solidRects(world: World): Rect[] {
-  return [...wallRects(world), ...world.obstacles]
+  return [...wallRects(world), ...world.obstacles, ...world.dividerWalls]
 }
 
 /** The car body must fit inside the spot and the spot mouth must stay clear. */

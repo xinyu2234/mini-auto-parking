@@ -185,7 +185,7 @@ export function planPath(world: World, start: Pose, goal: Pose, budgetMs: number
     closed.add(node.key)
     expanded++
 
-    if (expanded % 64 === 0 && performance.now() > deadline) {
+    if (expanded % 16 === 0 && performance.now() > deadline) {
       return { requestId: 0, status: 'timeout', path: [], expanded, elapsedMs: performance.now() - started, attempt: 0 }
     }
     if (expanded > PLANNER.maxExpansions) {

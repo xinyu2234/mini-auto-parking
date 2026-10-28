@@ -88,6 +88,24 @@ export function pointInRotatedRect(p: Point, rect: Rect, angle: number): boolean
   return Math.abs(lx) <= rect.w / 2 && Math.abs(ly) <= rect.h / 2
 }
 
+export function pointInPolygon(p: Point, polygon: Point[], eps = 0): boolean {
+  let inside = false
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const a = polygon[i]
+    const b = polygon[j]
+    const crosses = a.y > p.y !== b.y > p.y
+    const x = ((b.x - a.x) * (p.y - a.y)) / (b.y - a.y || 1e-12) + a.x
+    if (crosses && p.x < x + eps) inside = !inside
+  }
+  return inside
+}
+
+export function polygonCentroid(polygon: Point[]): Point {
+  const x = polygon.reduce((sum, p) => sum + p.x, 0) / polygon.length
+  const y = polygon.reduce((sum, p) => sum + p.y, 0) / polygon.length
+  return { x, y }
+}
+
 export function pointsOverlap(a: Point[], b: Point[], eps = 1e-7): boolean {
   const axes: Point[] = []
   for (let i = 0; i < a.length; i++) {

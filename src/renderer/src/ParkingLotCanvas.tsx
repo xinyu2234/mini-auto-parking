@@ -1,8 +1,7 @@
 import { useEffect, useRef } from 'react'
 import type { PathSample, Spot, World } from '../../core/types'
-import { pointInRotatedRect } from '../../core/geometry'
+import { pointInPolygon, pointInRotatedRect, polygonCentroid } from '../../core/geometry'
 import { wallRects } from '../../core/world'
-import { LOT_HEIGHT, LOT_WIDTH } from '../../core/world'
 
 interface Props {
   world: World
@@ -20,12 +19,14 @@ interface View {
   scale: number
   left: number
   top: number
+  worldW: number
+  worldH: number
 }
 
 export function ParkingLotCanvas(props: Props): JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const viewRef = useRef<View>({ scale: 40, left: 40, top: 40 })
+  const viewRef = useRef<View>({ scale: 40, left: 40, top: 40, worldW: 40, worldH: 20 })
   const propsRef = useRef<Props>(props)
   const renderRef = useRef<() => void>(() => {})
   propsRef.current = props
@@ -47,16 +48,20 @@ export function ParkingLotCanvas(props: Props): JSX.Element {
     const resize = () => {
       const w = container.clientWidth
       const h = container.clientHeight
+      const worldW = propsRef.current.world.bounds.w
+      const worldH = propsRef.current.world.bounds.h
       const dpr = window.devicePixelRatio || 1
       canvas.width = Math.max(1, Math.floor(w * dpr))
       canvas.height = Math.max(1, Math.floor(h * dpr))
       canvas.style.width = `${w}px`
       canvas.style.height = `${h}px`
-      const scale = Math.min((w - 60) / LOT_WIDTH, (h - 60) / LOT_HEIGHT)
+      const scale = Math.min((w - 60) / worldW, (h - 60) / worldH)
       viewRef.current = {
         scale,
-        left: (w - LOT_WIDTH * scale) / 2,
-        top: (h - LOT_HEIGHT * scale) / 2
+        left: (w - worldW * scale) / 2,
+        top: (h - worldH * scale) / 2,
+        worldW,
+        worldH
       }
       // Resizing a canvas clears its bitmap, so repaint right away.
       render()
@@ -73,12 +78,12 @@ export function ParkingLotCanvas(props: Props): JSX.Element {
 
   const worldToScreen = (x: number, y: number): { x: number; y: number } => {
     const v = viewRef.current
-    return { x: v.left + x * v.scale, y: v.top + (LOT_HEIGHT - y) * v.scale }
+    return { x: v.left + x * v.scale, y: v.top + (v.worldH - y) * v.scale }
   }
 
   const screenToWorld = (sx: number, sy: number): { x: number; y: number } => {
     const v = viewRef.current
-    return { x: (sx - v.left) / v.scale, y: LOT_HEIGHT - (sy - v.top) / v.scale }
+    return { x: (sx - v.left) / v.scale, y: v.worldH - (sy - v.top) / v.scale }
   }
 
   const handleMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -86,7 +91,9 @@ export function ParkingLotCanvas(props: Props): JSX.Element {
     if (!canvas) return
     const rect = canvas.getBoundingClientRect()
     const p = screenToWorld(e.clientX - rect.left, e.clientY - rect.top)
-    const hit = props.world.spots.find((s) => !s.occupied && pointInRotatedRect(p, s.rect, s.angle))
+    const hit = props.world.spots.find(
+      (s) => !s.occupied && (s.polygon ? pointInPolygon(p, s.polygon) : pointInRotatedRect(p, s.rect, s.angle))
+    )
     props.onHover(hit ? hit.id : null)
   }
 
@@ -95,7 +102,9 @@ export function ParkingLotCanvas(props: Props): JSX.Element {
     if (!canvas) return
     const rect = canvas.getBoundingClientRect()
     const p = screenToWorld(e.clientX - rect.left, e.clientY - rect.top)
-    const hit = props.world.spots.find((s) => !s.occupied && pointInRotatedRect(p, s.rect, s.angle))
+    const hit = props.world.spots.find(
+      (s) => !s.occupied && (s.polygon ? pointInPolygon(p, s.polygon) : pointInRotatedRect(p, s.rect, s.angle))
+    )
     if (hit) {
       props.onSelect(hit.id)
     }
@@ -117,7 +126,7 @@ export function ParkingLotCanvas(props: Props): JSX.Element {
 function draw(ctx: CanvasRenderingContext2D, props: Props, view: View): void {
   const { world } = props
   const sx = (x: number) => view.left + x * view.scale
-  const sy = (y: number) => view.top + (LOT_HEIGHT - y) * view.scale
+  const sy = (y: number) => view.top + (view.worldH - y) * view.scale
 
   ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height)
   ctx.fillStyle = '#151a21'
@@ -125,12 +134,18 @@ function draw(ctx: CanvasRenderingContext2D, props: Props, view: View): void {
 
   // Lot floor
   ctx.fillStyle = '#dfe3e6'
-  ctx.fillRect(sx(0), sy(LOT_HEIGHT), LOT_WIDTH * view.scale, LOT_HEIGHT * view.scale)
+  ctx.fillRect(sx(0), sy(world.bounds.h), world.bounds.w * view.scale, world.bounds.h * view.scale)
 
   // Wall
   ctx.fillStyle = '#3d4650'
   for (const w of wallRects(world)) {
     ctx.fillRect(sx(w.x), sy(w.y + w.h), w.w * view.scale, w.h * view.scale)
+  }
+  for (const w of world.dividerWalls) {
+    ctx.fillRect(sx(w.x), sy(w.y + w.h), w.w * view.scale, w.h * view.scale)
+    ctx.strokeStyle = '#2b333d'
+    ctx.lineWidth = 1.5
+    ctx.strokeRect(sx(w.x), sy(w.y + w.h), w.w * view.scale, w.h * view.scale)
   }
 
   // Entrance marking
@@ -185,6 +200,39 @@ function drawSpot(
   const parkedByUs = props.occupied.has(spot.id)
   const occupied = spot.occupied || parkedByUs
 
+  if (spot.polygon) {
+    const fill = occupied ? '#c9ced4' : selected ? '#4f9d5b' : hovered ? '#a9d6ab' : '#f4f6f7'
+    const stroke = occupied ? '#9aa3ac' : selected ? '#2e6b38' : '#8a949d'
+    ctx.save()
+    ctx.beginPath()
+    spot.polygon.forEach((p, i) => {
+      const px = sx(p.x)
+      const py = sy(p.y)
+      if (i === 0) ctx.moveTo(px, py)
+      else ctx.lineTo(px, py)
+    })
+    ctx.closePath()
+    ctx.fillStyle = fill
+    ctx.strokeStyle = stroke
+    ctx.lineWidth = selected ? 3 : 1.5
+    ctx.fill()
+    ctx.stroke()
+
+    if (spot.occupied) {
+      drawParkedCarAtPose(ctx, props.world, spot.goalPose, sx, sy, sx(1) - sx(0))
+      ctx.restore()
+      return
+    }
+    const center = polygonCentroid(spot.polygon)
+    ctx.fillStyle = parkedByUs ? '#6b737c' : selected ? '#ffffff' : '#4a5560'
+    ctx.font = `${Math.max(11, Math.min(w, h) * 0.22)}px "Segoe UI", sans-serif`
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillText(parkedByUs ? '已停' : 'P', sx(center.x), sy(center.y))
+    ctx.restore()
+    return
+  }
+
   ctx.save()
   ctx.translate(cx, cy)
   if (spot.angle !== 0) ctx.rotate(-spot.angle)
@@ -205,6 +253,31 @@ function drawSpot(
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
   ctx.fillText(parkedByUs ? '已停' : 'P', 0, 0)
+  ctx.restore()
+}
+
+function drawParkedCarAtPose(
+  ctx: CanvasRenderingContext2D,
+  world: World,
+  pose: { x: number; y: number; heading: number },
+  sx: (x: number) => number,
+  sy: (y: number) => number,
+  scale: number
+): void {
+  const w = world.car.width * scale
+  const l = world.car.length * scale
+  ctx.save()
+  ctx.translate(sx(pose.x), sy(pose.y))
+  ctx.rotate(-pose.heading)
+  ctx.fillStyle = '#7a828b'
+  ctx.strokeStyle = '#5b636b'
+  ctx.lineWidth = 1.5
+  ctx.beginPath()
+  ctx.roundRect(-l / 2, -w / 2, l, w, Math.min(l, w) * 0.25)
+  ctx.fill()
+  ctx.stroke()
+  ctx.fillStyle = '#aeb7c0'
+  ctx.fillRect(-l * 0.12, -w * 0.34, l * 0.24, w * 0.68)
   ctx.restore()
 }
 

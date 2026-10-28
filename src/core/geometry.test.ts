@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { pointInRect, pointInRotatedRect, pointsOverlap, rectCorners, rotatedRectCorners } from './geometry'
+import {
+  pointInPolygon,
+  pointInRect,
+  pointInRotatedRect,
+  pointsOverlap,
+  polygonCentroid,
+  rectCorners,
+  rotatedRectCorners
+} from './geometry'
 
 describe('geometry', () => {
   it('detects overlapping rectangles', () => {
@@ -43,5 +51,17 @@ describe('geometry', () => {
     expect(pointInRotatedRect({ x: 3.2, y: 0 }, rect, angle)).toBe(false)
     const corners = rotatedRectCorners(rect, angle)
     expect(corners.some((p) => Math.hypot(p.x - 1, p.y - 3) < 1e-9)).toBe(true)
+  })
+
+  it('handles parallelogram bays', () => {
+    const polygon = [
+      { x: 0, y: 0 },
+      { x: 3.6, y: 0 },
+      { x: 0, y: 3.6 },
+      { x: -3.6, y: 3.6 }
+    ]
+    expect(pointInPolygon({ x: 1, y: 1 }, polygon)).toBe(true)
+    expect(pointInPolygon({ x: -3.5, y: 0.5 }, polygon)).toBe(false)
+    expect(polygonCentroid(polygon)).toEqual({ x: 0, y: 1.8 })
   })
 })

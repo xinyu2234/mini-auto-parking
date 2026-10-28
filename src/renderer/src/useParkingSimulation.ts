@@ -127,6 +127,14 @@ export function useParkingSimulation(world: World): Simulation {
       setStatusSafe('planning')
       const worker = new Worker(new URL('./planner.worker.ts', import.meta.url), { type: 'module' })
       workerRef.current = worker
+      worker.onerror = (event) => {
+        ;(window as unknown as { __plannerError?: string }).__plannerError = event.message || 'worker error'
+        setStatusSafe('failed')
+      }
+      worker.onmessageerror = () => {
+        ;(window as unknown as { __plannerError?: string }).__plannerError = 'worker message clone failed'
+        setStatusSafe('failed')
+      }
       const reqId = ++requestIdRef.current
       worker.onmessage = (e: MessageEvent<PlannerResult>) => {
         if (e.data.requestId !== reqId) return
