@@ -260,18 +260,106 @@ function scatterObstacles(world: World, rng: Rng, count: number): Rect[] {
   return placed
 }
 
-/** Some bays are simulated as already taken by other cars. */
+function pointSegmentDistance(
+  p: { x: number; y: number },
+  a: { x: number; y: number },
+  b: { x: number; y: number }
+): number {
+  const abx = b.x - a.x
+  const aby = b.y - a.y
+  const lenSq = abx * abx + aby * aby
+  if (lenSq < 1e-12) return Math.hypot(p.x - a.x, p.y - a.y)
+  const t = Math.max(0, Math.min(1, ((p.x - a.x) * abx + (p.y - a.y) * aby) / lenSq))
+  return Math.hypot(p.x - (a.x + abx * t), p.y - (a.y + aby * t))
+}
+
+function polygonGap(a: { x: number; y: number }[], b: { x: number; y: number }[]): number {
+  let best = Infinity
+  for (let i = 0; i < a.length; i++) {
+    const p1 = a[i]
+    const p2 = a[(i + 1) % a.length]
+    for (const q of b) best = Math.min(best, pointSegmentDistance(q, p1, p2))
+  }
+  for (let i = 0; i < b.length; i++) {
+    const q1 = b[i]
+    const q2 = b[(i + 1) % b.length]
+    for (const p of a) best = Math.min(best, pointSegmentDistance(p, q1, q2))
+  }
+  return best
+}
+
+const ADJACENT_GAP = 0.7
+
+/** True when two bays share a side or are separated by only a painted gap. */
+export function spotsAdjacent(a: Spot, b: Spot, maxGap = ADJACENT_GAP): boolean {
+  const ca = a.polygon ?? rotatedRectCorners(a.rect, a.angle)
+  const cb = b.polygon ?? rotatedRectCorners(b.rect, b.angle)
+  return polygonGap(ca, cb) <= maxGap
+}
+
+/**
+ * Find an "occupied - free - occupied" triplet. The two occupied bays must sit
+ * on opposite sides of the free middle bay (front/back or left/right).
+ */
+function findSandwich(world: World, rng: Rng): [number, number, number] | null {
+  const candidates: [number, number, number][] = []
+  for (let mid = 0; mid < world.spots.length; mid++) {
+    const center = world.spots[mid].goalPose
+    const neighbors: number[] = []
+    for (let j = 0; j < world.spots.length; j++) {
+      if (j !== mid && spotsAdjacent(world.spots[mid], world.spots[j])) neighbors.push(j)
+    }
+    for (let a = 0; a < neighbors.length; a++) {
+      for (let b = a + 1; b < neighbors.length; b++) {
+        const p = world.spots[neighbors[a]].goalPose
+        const q = world.spots[neighbors[b]].goalPose
+        const v1x = p.x - center.x
+        const v1y = p.y - center.y
+        const v2x = q.x - center.x
+        const v2y = q.y - center.y
+        const len1 = Math.hypot(v1x, v1y)
+        const len2 = Math.hypot(v2x, v2y)
+        if (len1 < 1e-6 || len2 < 1e-6) continue
+        const cosine = (v1x * v2x + v1y * v2y) / (len1 * len2)
+        // Neighbors must lie on opposite sides of the middle bay.
+        if (cosine < -0.8) candidates.push([neighbors[a], mid, neighbors[b]])
+      }
+    }
+  }
+  if (candidates.length === 0) return null
+  return candidates[Math.floor(rng() * candidates.length)]
+}
+
 function assignOccupancy(world: World, rng: Rng): void {
-  const order = world.spots.map((_, i) => i)
-  for (let i = order.length - 1; i > 0; i--) {
+  const shuffled = world.spots.map((_, i) => i)
+  for (let i = shuffled.length - 1; i > 0; i--) {
     const j = Math.floor(rng() * (i + 1))
-    ;[order[i], order[j]] = [order[j], order[i]]
+    ;[shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]
   }
   const ratio = jitter(rng, 0.15, MAX_OCCUPANCY_RATIO)
-  const wanted = Math.floor(world.spots.length * ratio)
-  const capacity = Math.max(0, world.spots.length - MIN_FREE_SPOTS)
-  const taken = Math.min(wanted, capacity)
-  for (let i = 0; i < taken; i++) world.spots[order[i]].occupied = true
+  const capacity = Math.max(
+    0,
+    Math.min(world.spots.length - MIN_FREE_SPOTS, Math.floor(world.spots.length * MAX_OCCUPANCY_RATIO))
+  )
+  const target = Math.min(capacity, Math.max(2, Math.floor(world.spots.length * ratio)))
+  const occupied = new Set<number>()
+  const forcedFree = new Set<number>()
+
+  // Guarantee one worst-case bay: free in the middle with parked cars on both
+  // sides (or front and back, depending on the layout).
+  const sandwich = findSandwich(world, rng)
+  if (sandwich) {
+    occupied.add(sandwich[0])
+    occupied.add(sandwich[2])
+    forcedFree.add(sandwich[1])
+  }
+
+  for (const index of shuffled) {
+    if (occupied.size >= target) break
+    if (forcedFree.has(index)) continue
+    occupied.add(index)
+  }
+  for (const index of occupied) world.spots[index].occupied = true
 }
 
 function buildLayout(layout: LayoutId, seed: number, rng: Rng, withObstacles: boolean): World {

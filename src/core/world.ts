@@ -14,4 +14,4 @@ export {
   wallRects
 } from './lotGeometry'
 
-export { LAYOUT_OPTIONS, createWorld } from './worldGenerator'
+export { LAYOUT_OPTIONS, createWorld, spotsAdjacent } from './worldGenerator'

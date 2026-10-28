@@ -1,10 +1,38 @@
 import { describe, expect, it } from 'vitest'
 import { isPoseColliding } from './collision'
 import { pointsOverlap, rectCorners, rectsOverlap, rotatedRectCorners, wrapPi } from './geometry'
-import { approachZone, createWorld, reachableFreeRatio, validateWorldLayout } from './world'
+import { approachZone, createWorld, reachableFreeRatio, spotsAdjacent, validateWorldLayout } from './world'
 
 const LAYOUTS = ['perpendicular', 'parallel', 'angled'] as const
 const SEEDS = [1, 42, 777, 2024, 90210]
+
+function hasBoxedInFreeBay(world: ReturnType<typeof createWorld>): boolean {
+  for (let mid = 0; mid < world.spots.length; mid++) {
+    const middle = world.spots[mid]
+    if (middle.occupied) continue
+    const neighbors = world.spots.filter(
+      (spot, index) => index !== mid && spot.occupied && spotsAdjacent(middle, spot)
+    )
+    for (let i = 0; i < neighbors.length; i++) {
+      for (let j = i + 1; j < neighbors.length; j++) {
+        const v1 = {
+          x: neighbors[i].goalPose.x - middle.goalPose.x,
+          y: neighbors[i].goalPose.y - middle.goalPose.y
+        }
+        const v2 = {
+          x: neighbors[j].goalPose.x - middle.goalPose.x,
+          y: neighbors[j].goalPose.y - middle.goalPose.y
+        }
+        const len1 = Math.hypot(v1.x, v1.y)
+        const len2 = Math.hypot(v2.x, v2.y)
+        if (len1 > 1e-6 && len2 > 1e-6 && (v1.x * v2.x + v1.y * v2.y) / (len1 * len2) < -0.8) {
+          return true
+        }
+      }
+    }
+  }
+  return false
+}
 
 describe('randomized world generation', () => {
   it.each(LAYOUTS)('keeps the %s layout valid across many seeds', (layoutId) => {
@@ -46,6 +74,13 @@ describe('randomized world generation', () => {
       }
     }
     expect(peak).toBeGreaterThanOrEqual(0.7)
+  })
+
+  it.each(LAYOUTS)('always leaves a boxed-in free bay in %s', (layoutId) => {
+    for (const seed of SEEDS) {
+      const world = createWorld(layoutId, seed)
+      expect(hasBoxedInFreeBay(world), `${layoutId} ${seed}`).toBe(true)
+    }
   })
 
   it('reproduces the same lot for the same seed', () => {
